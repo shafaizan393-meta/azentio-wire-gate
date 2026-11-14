@@ -1,0 +1,7 @@
+INSERT INTO accounts (account_id, currency, available_balance, daily_outward_limit, status) VALUES
+    ('100000000001', 'INR', 5000000.00, 2000000.00, 'ACTIVE'),
+    ('100000000002', 'INR', 2500000.00, 1000000.00, 'ACTIVE'),
+    ('100000000003', 'INR', 1000000.00, 500000.00, 'ACTIVE'),
+    ('100000000004', 'INR', 150000.00, 100000.00, 'ACTIVE'),
+    ('100000000005', 'USD', 50000.00, 25000.00, 'ACTIVE'),
+    ('100000000006', 'INR', 100000.00, 50000.00, 'BLOCKED');

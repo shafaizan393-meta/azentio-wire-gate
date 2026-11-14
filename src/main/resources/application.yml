@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: wire-gate
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/wiregate}
+    username: ${DB_USERNAME:wiregate}
+    password: ${DB_PASSWORD:wiregate}
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+
+wire-gate:
+  fees:
+    DEBT: 1500.00
+    SHAR: 750.00
+    CRED: 0.00
+  high-risk-countries:
+    - IR
+    - KP
+    - MM
+  restricted-bics: []
+  corridor-purpose-codes:
+    IN-AE: [SALA, SUPP, GDDS, INTC]
+    IN-GB: [SALA, SUPP, GDDS, INTC]
