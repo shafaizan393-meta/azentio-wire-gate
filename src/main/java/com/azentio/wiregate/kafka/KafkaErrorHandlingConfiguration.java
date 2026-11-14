@@ -1,5 +1,6 @@
 package com.azentio.wiregate.kafka;
 
+import com.azentio.wiregate.api.WireConflictException;
 import java.nio.charset.StandardCharsets;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.internals.RecordHeaders;
@@ -33,7 +34,8 @@ public class KafkaErrorHandlingConfiguration {
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(
                 recoverer, new FixedBackOff(properties.getRetryBackoffMs(), properties.getRetryCount()));
-        errorHandler.addNotRetryableExceptions(NonRetryableWireException.class);
+        errorHandler.addNotRetryableExceptions(
+                NonRetryableWireException.class, WireConflictException.class);
         return errorHandler;
     }
 }

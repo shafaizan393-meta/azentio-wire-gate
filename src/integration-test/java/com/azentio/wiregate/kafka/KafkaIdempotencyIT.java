@@ -112,13 +112,29 @@ class KafkaIdempotencyIT {
         }
     }
 
+    @Test
+    void malformedKafkaWireIsDeadLetteredWithoutCreatingDatabaseRows() throws Exception {
+        try (Consumer<String, String> consumer = outcomeConsumer("kafka-malformed-test")) {
+            kafkaTemplate.send("wires.inbound", "100000000001", "{malformed json").get();
+
+            ConsumerRecord<String, String> deadLetter = KafkaTestUtils.getSingleRecord(
+                    consumer, "wires.inbound.DLQ", Duration.ofSeconds(10));
+
+            assertThat(new String(deadLetter.headers().lastHeader("error-reason").value()))
+                    .contains("Malformed wire JSON");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM wire_payment", Long.class)).isEqualTo(0);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM funds_earmark", Long.class)).isEqualTo(0);
+        }
+    }
+
     private Consumer<String, String> outcomeConsumer(String groupId) {
         Map<String, Object> properties = KafkaTestUtils.consumerProps(groupId, "false", broker);
         properties.put("key.deserializer", StringDeserializer.class);
         properties.put("value.deserializer", StringDeserializer.class);
         properties.put("auto.offset.reset", "latest");
         Consumer<String, String> consumer = new KafkaConsumer<>(properties);
-        consumer.subscribe(List.of("wires.approved", "wires.held", "wires.rejected"));
+        consumer.subscribe(List.of(
+                "wires.approved", "wires.held", "wires.rejected", "wires.inbound.DLQ"));
         consumer.poll(Duration.ofSeconds(1));
         return consumer;
     }

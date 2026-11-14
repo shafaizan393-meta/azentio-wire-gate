@@ -10,6 +10,7 @@ import jakarta.validation.Validator;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,8 @@ public class KafkaWireListener {
     }
 
     @KafkaListener(topics = "${wire-gate.kafka.inbound-topic:wires.inbound}")
-    public void onMessage(String payload) {
+    public void onMessage(ConsumerRecord<String, String> record) {
+        String payload = record.value();
         if (payload == null) {
             throw new NonRetryableWireException("Wire message body is empty.");
         }
@@ -49,13 +51,16 @@ public class KafkaWireListener {
         if (request == null) {
             throw new NonRetryableWireException("Wire message must contain a JSON object.");
         }
-
         Set<String> violations = validator.validate(request).stream()
                 .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
                 .collect(Collectors.toSet());
         if (!violations.isEmpty()) {
             throw new NonRetryableWireException(
                     "Wire validation failed: " + String.join("; ", violations));
+        }
+        if (record.key() == null || !record.key().equals(request.debtor().accountId())) {
+            throw new NonRetryableWireException(
+                    "Kafka record key must match the debtor accountId.");
         }
 
         WireResponse response = decisionService.decide(request);

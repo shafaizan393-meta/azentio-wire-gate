@@ -103,6 +103,20 @@ class KafkaWireListenerTest {
     }
 
     @Test
+    void mismatchedAccountKeyGoesDirectlyToDlq() throws Exception {
+        try (Consumer<String, String> consumer = consumer("mismatched-key-test")) {
+            kafkaTemplate.send("wires.inbound", "999999999999",
+                    objectMapper.writeValueAsString(request())).get();
+
+            ConsumerRecord<String, String> deadLetter =
+                    KafkaTestUtils.getSingleRecord(consumer, "wires.inbound.DLQ", Duration.ofSeconds(10));
+            assertThat(new String(deadLetter.headers().lastHeader("error-reason").value()))
+                    .contains("record key must match");
+            verify(decisionService, times(0)).decide(any(WireRequest.class));
+        }
+    }
+
+    @Test
     void retriesTransientFailuresAndPublishesAfterSuccess() throws Exception {
         WireResponse response = response(WireStatus.HELD);
         when(decisionService.decide(any(WireRequest.class)))

@@ -56,6 +56,15 @@ that partition. Outcomes are keyed by UETR so consumers can correlate each
 decision with its original payment. A database decision is committed before the
 outcome is published; if publication fails, Kafka redelivery retrieves the
 idempotent stored decision and republishes the same outcome.
+The consumer verifies that the record key matches the validated debtor account;
+malformed keys are non-retryable and go to the DLQ. The DLQ topic should have at
+least as many partitions as `wires.inbound`, because recovery preserves the
+original partition. Compose configures six default partitions for these topics.
+Malformed JSON, Bean Validation failures, and key mismatches go directly to the
+DLQ; transient failures receive three retries with the configured backoff before
+recovery to the DLQ. Dead-letter records preserve original topic, partition, and
+offset headers and include an `error-reason` header. Outcome publishing waits for
+the broker acknowledgement before committing the source record.
 
 ## API
 
