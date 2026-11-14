@@ -109,6 +109,26 @@ def test_full_account_number_in_summary_uses_fallback() -> None:
     assert "123456789012" not in result.summary
 
 
+def test_unmasked_account_from_api_is_redacted_before_provider_call() -> None:
+    payload = held_wire()
+    payload["debtorAccountMasked"] = "123456789012"
+    payload["reasons"][0]["detail"] = "Account 123456789012 is in a high-risk corridor."
+    provider = FixedProvider(
+        json.dumps(
+            {
+                "summary": "The creditor country is configured as high risk.",
+                "citedReasonCodes": ["HIGH_RISK_COUNTRY"],
+                "suggestedAction": "ESCALATE",
+            }
+        )
+    )
+
+    summarize_wire(UETR, FakeApiClient(payload), provider)
+
+    assert "123456789012" not in provider.prompt
+    assert "****9012" in provider.prompt
+
+
 def test_non_held_wire_returns_clear_error_from_endpoint() -> None:
     payload = held_wire()
     payload["status"] = "APPROVED"

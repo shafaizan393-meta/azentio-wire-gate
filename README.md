@@ -146,7 +146,9 @@ curl.exe -X POST http://localhost:8000/summaries/f47ac10b-58cc-4372-a567-0e02b2c
 The CLI alternative is `py -3 -m wiresummary <uetr>`. Set `WIRE_API_URL` if the
 Java API is not at `http://localhost:8080`. The response marks
 `suggestedActionIsAdvisory` as true; the summary service never changes a payment
-decision.
+decision. Unmasked 10-or-more-digit runs in account and reason fields are
+redacted before sending a prompt to the provider, and rejected in generated
+summaries.
 
 An optional local Ollama provider can be selected with
 `WIRESUMMARY_PROVIDER=ollama`, `OLLAMA_URL`, and `OLLAMA_MODEL`. It is not required

@@ -16,6 +16,10 @@ _PROMPT_INSTRUCTIONS = (
 )
 
 
+def _redact_unmasked_accounts(value: str) -> str:
+    return _UNMASKED_ACCOUNT.sub(lambda match: "****" + match.group(0)[-4:], value)
+
+
 def build_prompt(wire: HeldWire) -> str:
     payload = {
         "uetr": wire.uetr,
@@ -25,13 +29,27 @@ def build_prompt(wire: HeldWire) -> str:
         "earmarkedAmount": (
             str(wire.earmarkedAmount) if wire.earmarkedAmount is not None else None
         ),
-        "debtorAccountMasked": wire.debtorAccountMasked,
-        "creditorAccountMasked": wire.creditorAccountMasked,
+        "debtorAccountMasked": (
+            _redact_unmasked_accounts(wire.debtorAccountMasked)
+            if wire.debtorAccountMasked is not None
+            else None
+        ),
+        "creditorAccountMasked": (
+            _redact_unmasked_accounts(wire.creditorAccountMasked)
+            if wire.creditorAccountMasked is not None
+            else None
+        ),
         "debtorAgentBic": wire.debtorAgentBic,
         "creditorAgentBic": wire.creditorAgentBic,
         "intermediaryAgentBic": wire.intermediaryAgentBic,
         "corridor": wire.corridor,
-        "reasons": [reason.model_dump() for reason in wire.reasons],
+        "reasons": [
+            {
+                "code": reason.code,
+                "detail": _redact_unmasked_accounts(reason.detail),
+            }
+            for reason in wire.reasons
+        ],
     }
     return f"{_PROMPT_INSTRUCTIONS}\nWIRE_DATA:\n{json.dumps(payload, sort_keys=True)}"
 
@@ -58,7 +76,7 @@ def summarize_wire(
             raise ValueError("The summary contains an unmasked account number.")
     except (ValueError, ValidationError, json.JSONDecodeError):
         details = "; ".join(
-            _UNMASKED_ACCOUNT.sub("[redacted]", reason.detail)
+            _redact_unmasked_accounts(reason.detail)
             for reason in wire.reasons
         )
         summary = f"This wire was held because: {details}" if details else "This wire was held."
