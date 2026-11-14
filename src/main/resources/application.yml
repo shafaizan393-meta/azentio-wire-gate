@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: wire-gate
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/wiregate}
+    username: ${DB_USERNAME:wiregate}
+    password: ${DB_PASSWORD:wiregate}
+  flyway:
+    enabled: true
+  jackson:
+    default-property-inclusion: non_null
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
+      ack-mode: record
+    consumer:
+      group-id: wire-gate
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      acks: all
+      retries: 5
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+wire-gate:
+  fees:
+    DEBT: 1500.00
+    SHAR: 750.00
+    CRED: 0.00
+  high-risk-countries:
+    - IR
+    - KP
+    - MM
+  restricted-bics: []
+  corridor-purpose-codes:
+    IN-AE: [SALA, SUPP, GDDS, INTC]
+    IN-GB: [SALA, SUPP, GDDS, INTC]
+  kafka:
+    inbound-topic: wires.inbound
+    approved-topic: wires.approved
+    held-topic: wires.held
+    rejected-topic: wires.rejected
+    retry-backoff-ms: 250
+    retry-count: 3
