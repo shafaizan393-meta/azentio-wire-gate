@@ -9,6 +9,18 @@ spring:
     enabled: true
   jackson:
     default-property-inclusion: non_null
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
+    consumer:
+      group-id: wire-gate
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 wire-gate:
   fees:
@@ -23,3 +35,10 @@ wire-gate:
   corridor-purpose-codes:
     IN-AE: [SALA, SUPP, GDDS, INTC]
     IN-GB: [SALA, SUPP, GDDS, INTC]
+  kafka:
+    inbound-topic: wires.inbound
+    approved-topic: wires.approved
+    held-topic: wires.held
+    rejected-topic: wires.rejected
+    retry-backoff-ms: 250
+    retry-count: 3

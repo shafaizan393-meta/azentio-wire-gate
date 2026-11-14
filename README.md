@@ -1,9 +1,8 @@
 # Project Nostro — Wire Gate
 
-Java 21 / Spring Boot REST service for making a pre-settlement decision on synthetic
-cross-border wires. The current implementation is the Task 1 foundation: validated
-wire intake, funds and daily-limit checks, configurable risk rules, idempotency,
-PostgreSQL persistence, and cursor-based lookup.
+Java 21 / Spring Boot service for making pre-settlement decisions on synthetic
+cross-border wires, consuming the same decisions from Kafka, and providing
+offline-testable summaries for held wires in Python.
 
 ## Architecture
 
@@ -15,6 +14,10 @@ REST controller
        -> funds / UTC daily-limit checks
        -> configurable risk-rule evaluator
        -> wire_payment, funds_earmark, alert
+Kafka wires.inbound (keyed by debtor account)
+  -> same WireDecisionService
+  -> wires.approved | wires.held | wires.rejected (keyed by UETR)
+  -> wires.inbound.DLQ on malformed, invalid, or exhausted transient failures
 ```
 
 PostgreSQL is the source of truth. A transaction-scoped advisory lock serializes
@@ -42,9 +45,17 @@ defaults in `application.yml`, then run:
 .\mvnw.cmd spring-boot:run
 ```
 
-The database must be healthy before startup; Flyway creates the tables and seeds
-synthetic accounts on first run. The Java service can be started from the IDE;
-Kafka is included for the upcoming consumer task.
+The database and broker must be healthy before startup; Flyway creates the tables
+and seeds synthetic accounts on first run. The Java service can be started from
+the IDE. Copy `.env.example` to `.env` to configure the Compose PostgreSQL
+container; the documented defaults also work without that file.
+
+Kafka producers should key inbound records by debtor `accountId`. Kafka places
+records with the same key on the same partition, preserving their order within
+that partition. Outcomes are keyed by UETR so consumers can correlate each
+decision with its original payment. A database decision is committed before the
+outcome is published; if publication fails, Kafka redelivery retrieves the
+idempotent stored decision and republishes the same outcome.
 
 ## API
 
@@ -79,6 +90,10 @@ Seeded debtor accounts:
 | `100000000005` | USD | 50,000.00 | 25,000.00 | ACTIVE |
 | `100000000006` | INR | 100,000.00 | 50,000.00 | BLOCKED |
 
+The load-test migration additionally seeds 200 active INR accounts with IDs
+`200000000001` through `200000000200`, each with a large synthetic balance and
+daily limit.
+
 Decision checks run in this order: account missing/not active, currency mismatch,
 available funds including configured fee, UTC-date daily outward limit, then all
 risk rules. Rejected wires do not earmark funds. Approved and held wires earmark
@@ -98,10 +113,71 @@ Run unit tests (no database or Docker required):
 If Maven is installed, the equivalent commands are `mvn spring-boot:run` and
 `mvn test`.
 
-PostgreSQL-backed service and concurrency tests will be added as a separate
-integration task/profile.
+Embedded Kafka behavior is covered in the regular test suite. PostgreSQL-backed
+service and concurrency tests are separate because they require Docker.
+
+## Held-wire summary service
+
+Python 3.10+ is required. Install its dependencies and run the offline tests:
+
+```powershell
+py -3 -m pip install -e ".[test]"
+py -3 -m pytest
+```
+
+With the Java API running, request a summary using the deterministic offline
+provider:
+
+```powershell
+$env:WIRESUMMARY_PROVIDER = "fake"
+py -3 -m uvicorn wiresummary.app:app --port 8000
+curl.exe -X POST http://localhost:8000/summaries/f47ac10b-58cc-4372-a567-0e02b2c3d479
+```
+
+The CLI alternative is `py -3 -m wiresummary <uetr>`. Set `WIRE_API_URL` if the
+Java API is not at `http://localhost:8080`. The response marks
+`suggestedActionIsAdvisory` as true; the summary service never changes a payment
+decision.
+
+An optional local Ollama provider can be selected with
+`WIRESUMMARY_PROVIDER=ollama`, `OLLAMA_URL`, and `OLLAMA_MODEL`. It is not required
+for tests and sends only the selected wire response fields to the local provider.
+
+## Kafka load test
+
+The load migration seeds 200 synthetic INR accounts with sufficient balance and
+daily limits. Install the optional producer dependency and run the script while
+the Java service and Docker Compose broker are running:
+
+```powershell
+py -3 -m pip install -e ".[load]"
+py -3 scripts/load.py
+```
+
+The script sends 10,000 messages by default (1% malformed), tracks outcomes by
+UETR and original DLQ offset to ignore duplicate redeliveries, waits up to ten
+minutes, and prints throughput and topic counts. Set `LOAD_MESSAGE_COUNT`,
+`LOAD_TIMEOUT_SECONDS`, and `KAFKA_BOOTSTRAP_SERVERS` to adjust the run.
+Record the actual output here after running with Docker:
+
+```text
+Not yet measured: Docker Desktop has not been started in this environment.
+```
+
+## PostgreSQL integration tests
+
+The optional Testcontainers profile verifies real PostgreSQL idempotency,
+masking/logging, 45-item keyset pagination, and 20-way concurrent earmarking:
+
+```powershell
+.\mvnw.cmd verify -Pintegration
+```
+
+Docker must be running for this profile. These tests are excluded from plain
+`.\mvnw.cmd test`; the normal unit and embedded-Kafka suite does not require Docker.
 
 ## Next
 
-Complete API/persistence edge-case tests, then add Kafka ingestion and dead-letter
-handling, the offline-testable Python held-wire summary service, and Docker Compose.
+Run the PostgreSQL integration suite and 10,000-wire Kafka load benchmark with
+Docker, then record the measured throughput and review the implementation before
+submission.

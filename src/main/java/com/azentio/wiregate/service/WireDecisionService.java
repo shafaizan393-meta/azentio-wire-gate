@@ -26,9 +26,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class WireDecisionService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(WireDecisionService.class);
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final RiskRuleEvaluator riskRuleEvaluator;
@@ -85,10 +91,15 @@ public class WireDecisionService {
                 uetr,
                 status,
                 List.copyOf(reasons),
+                request.amount(),
+                request.currency(),
                 fee,
                 earmarkedAmount,
                 mask(request.debtor().accountId()),
                 mask(request.creditor().accountId()),
+                request.debtorAgentBic(),
+                request.creditorAgentBic(),
+                request.intermediaryAgentBic(),
                 corridor,
                 null);
 
@@ -112,11 +123,23 @@ public class WireDecisionService {
             Long id = jdbc.queryForObject("""
                     INSERT INTO alert (uetr, status) VALUES (?, 'OPEN') RETURNING id
                     """, Long.class, uetr);
-            response = new WireResponse(uetr, status, List.copyOf(reasons), fee, earmarkedAmount,
-                    mask(request.debtor().accountId()), mask(request.creditor().accountId()), corridor, id);
+            response = new WireResponse(
+                    uetr, status, List.copyOf(reasons), request.amount(), request.currency(), fee,
+                    earmarkedAmount, mask(request.debtor().accountId()),
+                    mask(request.creditor().accountId()), request.debtorAgentBic(),
+                    request.creditorAgentBic(), request.intermediaryAgentBic(), corridor, id);
             jdbc.update("UPDATE wire_payment SET response_payload = ?::jsonb WHERE uetr = ?",
                     toJson(response), uetr);
         }
+        String maskedAccountId = mask(request.debtor().accountId());
+        WireStatus decidedStatus = status;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                LOGGER.info("Wire {} decided {} for debtor account {}.",
+                        uetr, decidedStatus, maskedAccountId);
+            }
+        });
         return response;
     }
 

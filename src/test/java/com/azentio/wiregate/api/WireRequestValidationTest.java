@@ -34,6 +34,23 @@ class WireRequestValidationTest {
     }
 
     @Test
+    void acceptsMaximumAmountAndRejectsMoreThanTwoFractionDigits() {
+        WireRequest valid = validRequest();
+        WireRequest maximum = new WireRequest(
+                valid.msgId(), valid.uetr(), valid.createdAt(), new BigDecimal("99999999.99"),
+                valid.currency(), valid.chargeBearer(), valid.debtor(), valid.debtorAgentBic(),
+                valid.creditor(), valid.creditorAgentBic(), null, null, null);
+        assertThat(validator.validate(maximum)).isEmpty();
+
+        WireRequest tooManyFractionDigits = new WireRequest(
+                valid.msgId(), valid.uetr(), valid.createdAt(), new BigDecimal("1.001"),
+                valid.currency(), valid.chargeBearer(), valid.debtor(), valid.debtorAgentBic(),
+                valid.creditor(), valid.creditorAgentBic(), null, null, null);
+        assertThat(validator.validate(tooManyFractionDigits))
+                .anySatisfy(error -> assertThat(error.getPropertyPath().toString()).isEqualTo("amount"));
+    }
+
+    @Test
     void reportsInvalidMoneyCurrencyBicAccountAndRemittanceFields() {
         WireRequest valid = validRequest();
         WireRequest invalid = new WireRequest(
